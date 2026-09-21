@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-09-19
+
+### Highlights
+
+- Start installed copies of Pi Web Access much faster with a precompiled bundle.
+- Use standalone OpenAI search or reuse an existing Pi provider URL without duplicating gateway configuration.
+- Control which search providers and fetch modes are available.
+- Search Google through the new explicit Serply provider.
+- Get more reliable proxy handling, OpenCode requests, PDF answers, source checks, and stored-content retrieval.
+
+### Added
+
+- Added opt-in `openaiUseProviderBaseUrl` to reuse a selected Pi provider's URL and credentials for OpenAI search. An explicit `openaiResponsesUrl` still takes precedence.
+- Added opt-in `openaiUseAlphaSearch` for standalone OpenAI search, with source limits, recency filtering, allowed-domain filtering, and normal provider fallback. Existing Responses search remains the default. Thanks to [@ZacharyQin](https://github.com/ZacharyQin) for [PR #420](https://github.com/nicobailon/pi-web-access/pull/420).
+- Added `fetch.defaultMode` and `fetch.allowedModes` for choosing the default `fetch_content` mode and disabling unwanted modes. Thanks to [@Slooz](https://github.com/Slooz) for #395.
+- Added `webSearch.allowedProviders` to restrict providers consistently across search, source checks, routing, aggregation, schemas, and Curator. Thanks to [@Slooz](https://github.com/Slooz) for #396.
+- Added an explicit-only Serply Google Search provider with domain filtering, recency filtering, routing, and Curator support. Configure it with `serplyApiKey` or `SERPLY_API_KEY`. Thanks to Serply vendor [@googio](https://github.com/googio) for PR #386.
+
+### Changed
+
+- Published packages now load a precompiled bundle for faster startup, while source checkouts continue loading TypeScript directly. Thanks to [@Yisus423](https://github.com/Yisus423) for [issue #418](https://github.com/nicobailon/pi-web-access/issues/418) and [PR #419](https://github.com/nicobailon/pi-web-access/pull/419).
+- Fresh installs now use the silent `none` web search workflow by default. Explicit and configured Curator or summary workflows are unchanged. Thanks to [@ducaoya](https://github.com/ducaoya) for issue #416.
+
+### Fixed
+
+- Preserve legacy `~/.pi/web-search.json` configuration when `~/.pi/agent/web-search.json` is absent in default environments without `XDG_CONFIG_HOME`. Thanks to [@fancyboi999](https://github.com/fancyboi999) for issue #411.
+- List Crawl4AI in the README provider summary and the package description, which both still omitted it after the provider shipped in 0.29.0. Thanks to [@bergheim](https://github.com/bergheim) for [PR #382](https://github.com/nicobailon/pi-web-access/pull/382).
+- Removed the unconditional global `fetch` replacement during extension initialization; proxy transport is now installed lazily when a proxied web-tool operation runs. Thanks to [@AdrianJ20](https://github.com/AdrianJ20) for [issue #388](https://github.com/nicobailon/pi-web-access/issues/388).
+- Send OpenCode session attribution headers when generating summaries, preventing configured `opencode` and `opencode-go` summary models from silently falling through to another candidate. Thanks to [@damozhang](https://github.com/damozhang) for issue #385.
+- Send the `x-opencode-session` / `x-opencode-client` attribution headers when `fetch_content` answer mode uses an `opencode` or `opencode-go` model. The answer path dispatches through the model registry, which bypasses the attribution headers Pi merges in the main agent loop, so those requests were rejected with `400 MissingSessionID`. Thanks to [@MrSerious0](https://github.com/MrSerious0) for PR #381.
+- Pass extracted PDF Markdown to `fetch_content` answer mode instead of the saved-file notice, while preserving readable-mode file output and stored-content retrieval. Thanks to [@MDGChamomile](https://github.com/MDGChamomile) for PR #390.
+- Prevent malformed `fetch_content` auth, mode, or proxy parameters from breaking tool-call rendering while preserving strict execution validation. Thanks to [@tekumara](https://github.com/tekumara) for issue #387.
+- Clarified that a negative `fetch_content` answer-mode result means the answer was not found in the extracted content, rather than asserting that it is absent from the whole page. Thanks to [@Slooz](https://github.com/Slooz) for issue #394.
+- Stop inferring claim support or contradiction from unrelated lexical markers in `source_check`; retrieved passages now require manual semantic review. Thanks to [@wayenchan](https://github.com/wayenchan) for issue #383.
+- Return bounded `get_search_content` excerpts instead of dropping oversized merged match ranges, using compact query IDs to reserve representative ranges when discovered spans fit the output budget. Thanks to [@MDGChamomile](https://github.com/MDGChamomile) for PR #391.
+
 ## [0.29.0] - 2026-09-10
 
 ### Highlights

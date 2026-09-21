@@ -221,3 +221,43 @@ test("get_search_content finds bounded passages in stored fetched content", asyn
 	assert.match(result.content[0].text, /Installation requires Node 22/);
 	assert.ok(result.content[0].text.length < 1_000);
 });
+
+test("get_search_content represents every matching maximum-length query under overflow", async () => {
+	const tool = getContentTool();
+	const sequence = "a".repeat(499) + "0123456789";
+	const queries = Array.from({ length: 10 }, (_, index) => sequence.slice(index, index + 500));
+	const gap = "Z".repeat(1_000);
+	const occurrence = query => `${"x".repeat(500)}${query}${"x".repeat(500)}`;
+	const content = [
+		...queries.slice(0, 9).map(occurrence),
+		sequence,
+		occurrence(queries[0]),
+		occurrence(queries[1]),
+		occurrence(queries[9]),
+	].join(gap);
+	storeFetchedContent(content);
+
+	assert.equal(new Set(queries).size, 10);
+	assert.ok(queries.every(query => query.length === 500));
+	assert.equal(Value.Check(tool.parameters.properties.findText, queries), true);
+	const result = await tool.execute("call", {
+		responseId: "large-fetch",
+		urlIndex: 0,
+		findText: queries,
+		findMode: "exact",
+	});
+	const excerpts = result.content[0].text.split("\n\n").slice(1).join("\n\n");
+
+	assert.equal(result.details.matchCount, 22);
+	assert.ok(result.details.returnedMatches <= result.details.matchCount);
+	const snippets = excerpts.split("\n\n").filter(section => /^\d+\. /.test(section))
+		.map(section => section.split("\n").slice(1).join("\n")).join("");
+	for (const [index, query] of queries.entries()) {
+		assert.ok(excerpts.includes(`Q${index + 1} = "${query}"`), "missing legend entry");
+		assert.ok(snippets.includes(query), "missing representative occurrence");
+	}
+	if (result.details.returnedMatches < result.details.matchCount) {
+		assert.match(excerpts, /Showing \d+ of 22 matches\./);
+	}
+	assert.ok(excerpts.length <= 20_000);
+});
