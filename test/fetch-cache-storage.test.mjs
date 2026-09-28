@@ -10,6 +10,8 @@ const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
 const originalDateNow = Date.now;
 const testAgentDir = await mkdtemp(join(tmpdir(), "pi-web-access-fetch-cache-"));
 process.env.PI_CODING_AGENT_DIR = testAgentDir;
+// Direct `node --test <file>` runs skip test/isolate-env.mjs.
+delete process.env.PI_WEB_ACCESS_CACHE_ROOT;
 
 const { default: initializeExtension } = await import("../index.ts");
 const {
@@ -240,6 +242,29 @@ test("cache pruning reclaims expired inline payloads even without a disk cache",
 	assert.deepEqual(getAllResults().map((data) => data.urls[0].content), ["", ""]);
 	assert.ok(getAllResults().every((data) => data.urls[0].error === "Cached fetched content is missing or expired"));
 	assert.equal(legacy.urls[0].content, "legacy payload");
+});
+
+test("PI_WEB_ACCESS_CACHE_ROOT moves only the fetched-content cache, into a folder it owns", async () => {
+	await useTempAgentDir();
+	const root = await mkdtemp(join(tmpdir(), "pi-web-access-cache-root-"));
+	const userFile = join(root, "notes.json");
+	writeFileSync(userFile, "{}");
+	utimesSync(userFile, new Date(0), new Date(0));
+	process.env.PI_WEB_ACCESS_CACHE_ROOT = root;
+	try {
+		const sessionEntry = storeFetchedContentResult("isolated", fetchedData("isolated", "isolated payload"));
+		pruneExpiredFetchCache();
+		assert.deepEqual(readdirSync(join(root, "web-search-cache")), ["isolated.json"]);
+		assert.deepEqual(readdirSync(root).sort(), ["notes.json", "web-search-cache"]);
+		assert.equal(readdirSync(testAgentDir).includes("web-search-cache"), false);
+
+		clearResults();
+		restoreEntry(sessionEntry);
+		assert.equal(getResult("isolated")?.urls?.[0]?.content, "isolated payload");
+	} finally {
+		delete process.env.PI_WEB_ACCESS_CACHE_ROOT;
+		rmSync(root, { recursive: true, force: true });
+	}
 });
 
 test("cache pruning evicts the oldest entries by count and bytes", async () => {

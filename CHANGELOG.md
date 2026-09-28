@@ -4,6 +4,73 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-09-27
+
+### Highlights
+
+- Keep every web tool available from the first message with `"toolActivation": "eager"`, for models that rarely call `web_enable` on their own.
+- Search with You.com when you select it explicitly.
+- Give each Pi process its own fetched-page cache so parallel sessions stop evicting each other's pages.
+- Model allowlists in `enabledModels` or `--models` now work with every pattern Pi accepts.
+- Resumed older sessions keep the tools they had instead of gaining `web_enable`.
+
+### Added
+
+- Set `"toolActivation": "eager"` in `web-search.json` to skip `web_enable` and keep every enabled web tool available from the first message. With the default `"dynamic"` setting, `web_enable` now tells the model to call it first whenever current, external, or linked information could help. Thanks to [@ackalker](https://github.com/ackalker) for [issue #458](https://github.com/nicobailon/pi-web-access/issues/458).
+- Set `PI_WEB_ACCESS_CACHE_ROOT` to a directory to give a Pi process its own fetched-page cache. The cache goes in a `web-search-cache` folder inside that directory, and `web-search.json` stays where it is. Parallel sessions then stop evicting each other's cached pages. Thanks to [@goodman-b](https://github.com/goodman-b) for [issue #457](https://github.com/nicobailon/pi-web-access/issues/457).
+- You.com is available as an optional search provider. Set `youApiKey` or `YDC_API_KEY`, then select `provider: "you"`, add it to a provider list, or list it in `searchRouting`. It also appears in the Curator. `auto` and `provider: "all"` never pick it. Thanks to [@mouse-value-add](https://github.com/mouse-value-add) for [PR #461](https://github.com/nicobailon/pi-web-access/pull/461).
+
+### Fixed
+
+- Resuming a session that never had `web_enable`, for example one started before pi-web-access was installed or upgraded, no longer adds it partway through the conversation. The session keeps the tools it already had. Thanks to [@nilsoskar](https://github.com/nilsoskar) for [issue #462](https://github.com/nicobailon/pi-web-access/issues/462).
+- Answer mode, query rewrite, and summaries now follow the model list Pi builds from `enabledModels` or `--models`, so every pattern Pi accepts works here too, including patterns such as `@(!(openai-codex))/*` and partial names such as `sonnet`. Before, an allowlist made of those patterns blocked every model. Thanks to [@IdrisGit](https://github.com/IdrisGit) for [issue #463](https://github.com/nicobailon/pi-web-access/issues/463) and [PR #464](https://github.com/nicobailon/pi-web-access/pull/464).
+- `web_enable` now depends on the version of Pi you are running, not an older Pi package that may be installed next to the extension, so those setups no longer lose it. It needs Pi 0.86.0 or newer. On older Pi, every enabled web tool stays available from the start. Thanks to [@PhrZer](https://github.com/PhrZer) for [PR #456](https://github.com/nicobailon/pi-web-access/pull/456) and [@nguyenchiencong](https://github.com/nguyenchiencong) for [issue #444](https://github.com/nicobailon/pi-web-access/issues/444).
+
+## [0.32.0] - 2026-09-26
+
+### Highlights
+
+- Spread Tavily searches across up to 20 API keys, with automatic failover when one runs out of quota.
+- Use Gemini Web browser cookies on KDE Linux, where Chrome keeps its password in KWallet.
+- Search with OpenAI through OpenCode and `opencode-go` without session errors or the wrong model.
+- See full search queries and URLs in tool-call labels.
+- Globally installed Pi no longer shows false version or duplicate TypeBox warnings.
+
+### Added
+
+- Tavily can use a pool of up to 20 API keys. Set `TAVILY_API_KEY_1` through `TAVILY_API_KEY_20`, and when a key hits a quota or auth error the search moves on to the next one. `TAVILY_API_KEY_INDEX` picks the key to try first, and `TAVILY_API_KEY` / `tavilyApiKey` is tried last. Thanks to [@apoapostolov](https://github.com/apoapostolov) for [PR #430](https://github.com/nicobailon/pi-web-access/pull/430).
+
+### Fixed
+
+- On KDE Linux, Chrome and Chromium cookies for Gemini Web now decrypt with the password stored in KWallet when Secret Service doesn't have it. Thanks to [@dianzuan](https://github.com/dianzuan) for [issue #436](https://github.com/nicobailon/pi-web-access/issues/436).
+- OpenAI search requests to `opencode.ai` now include OpenCode's session headers, fixing `400 MissingSessionID` errors. Other destinations never receive these headers. Thanks to [@juliocc](https://github.com/juliocc) for [PR #445](https://github.com/nicobailon/pi-web-access/pull/445).
+- When `openaiSearchModel` isn't set, OpenAI search through gateways such as `opencode-go` now picks the newest GPT model instead of a non-OpenAI model.
+- Globally installed Pi no longer shows a false "requires Pi 0.86.1 or newer" warning, and dynamic tool activation now works there. Thanks to [@samsimsom](https://github.com/samsimsom) for [issue #428](https://github.com/nicobailon/pi-web-access/issues/428).
+- TypeBox now comes from Pi instead of being installed separately, which avoids duplicate copies and Pi startup warnings. Thanks to [@ksreenivasan](https://github.com/ksreenivasan) for [issue #442](https://github.com/nicobailon/pi-web-access/issues/442) and [PR #443](https://github.com/nicobailon/pi-web-access/pull/443).
+- Tool-call labels show full search queries and fetch URLs when the terminal is wide enough, instead of cutting them off at 60 characters. Thanks to [@TheBestPessimist](https://github.com/TheBestPessimist) for [issue #440](https://github.com/nicobailon/pi-web-access/issues/440).
+
+## [0.31.0] - 2026-09-22
+
+### Highlights
+
+- Start fresh sessions with a smaller web-tool list, then enable the tools when you need them.
+- Keep long search responses manageable without losing access to the full results.
+- Search with Baizhi MCP when you explicitly configure it.
+- Connect Brave, Exa, and Tavily to local HTTP services on loopback addresses.
+
+### Added
+
+- Fresh sessions now show `web_enable` instead of the full web-tool list when supported. Call it to make your configured web tools available. Thanks to [@Knimoms](https://github.com/Knimoms) for [PR #424](https://github.com/nicobailon/pi-web-access/pull/424).
+- Added Baizhi MCP as an optional search provider, with search routing and Curator support. It is used only when explicitly selected. Thanks to [@ct-jaryn](https://github.com/ct-jaryn) for [PR #422](https://github.com/nicobailon/pi-web-access/pull/422).
+
+### Changed
+
+- Long `web_search` responses now show a shorter result and the providers used. Full results remain available through `get_search_content`. Thanks to [@theSprog](https://github.com/theSprog) for [issue #423](https://github.com/nicobailon/pi-web-access/issues/423).
+
+### Fixed
+
+- Allow explicitly configured Brave, Exa, and Tavily API base URLs to use HTTP on true loopback hosts while continuing to require HTTPS remotely. Thanks to [@aaschmid](https://github.com/aaschmid) for [issue #421](https://github.com/nicobailon/pi-web-access/issues/421).
+
 ## [0.30.0] - 2026-09-19
 
 ### Highlights

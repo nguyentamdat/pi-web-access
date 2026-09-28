@@ -183,9 +183,63 @@ test("get_search_content normalizes bridge defaults for search matches", async (
 	});
 
 	assert.equal(result.details.findMode, "case-insensitive");
-	assert.equal(result.details.matchCount, 3);
+	assert.equal(result.details.matchCount, 4);
 	assert.match(result.content[0].text, /ScriptManager\.swift/);
 	assert.match(result.content[0].text, /ScriptMenu/);
+});
+
+test("get_search_content pages complete search data and validates search ranges", async () => {
+	const tool = getContentTool();
+	const lateSnippet = `LATE_SNIPPET_${"S".repeat(116_000)}`;
+	const source = {
+		query: "oversized stored search",
+		answer: `answer ${"A".repeat(40_000)} OMITTED_ANSWER`,
+		results: [
+			{ title: "First", url: "https://example.com/first", snippet: "first snippet" },
+			{ title: "Late", url: "https://example.com/late", snippet: lateSnippet },
+		],
+		error: null,
+		provider: "fixture-provider",
+	};
+	storeResult("oversized-search", { id: "oversized-search", type: "search", timestamp: Date.now(), queries: [source] });
+
+	const first = await tool.execute("call", { responseId: "oversized-search", queryIndex: 0, limit: 30_000 });
+	assert.ok(first.details.returnedChars < 30_000);
+	assert.equal(first.details.nextOffset, first.details.returnedChars);
+	assert.equal(first.details.truncated, true);
+	assert.ok(first.content[0].text.length <= 30_000);
+	assert.ok(first.details.contentLength > 156_000);
+	assert.match(first.content[0].text, /Provider:\*\* fixture-provider/);
+	assert.doesNotMatch(first.content[0].text, /LATE_SNIPPET/);
+
+	const late = await tool.execute("call", {
+		responseId: "oversized-search",
+		queryIndex: 0,
+		findText: ["OMITTED_ANSWER", "LATE_SNIPPET"],
+		findMode: "exact",
+	});
+	assert.equal(late.details.matchCount, 2);
+	assert.match(late.content[0].text, /OMITTED_ANSWER/);
+	assert.match(late.content[0].text, /LATE_SNIPPET/);
+
+	const one = await tool.execute("call", { responseId: "oversized-search", queryIndex: 0, limit: 1 });
+	assert.equal(one.details.returnedChars, 1);
+	assert.equal(one.details.nextOffset, 1);
+	assert.ok(one.content[0].text.length <= 30_000);
+	assert.match(one.content[0].text, /offset: 1, limit: 1/);
+
+	const eof = await tool.execute("call", { responseId: "oversized-search", queryIndex: 0, offset: first.details.contentLength, limit: 1 });
+	assert.equal(eof.content[0].text, "");
+	assert.equal(eof.details.returnedChars, 0);
+	assert.equal(eof.details.nextOffset, null);
+	assert.equal(eof.details.truncated, false);
+
+	const invalidLimit = await tool.execute("call", { responseId: "oversized-search", queryIndex: 0, limit: 30_001 });
+	assert.equal(invalidLimit.details.error, "Invalid limit");
+	const invalidOffset = await tool.execute("call", { responseId: "oversized-search", queryIndex: 0, offset: -1 });
+	assert.equal(invalidOffset.details.error, "Invalid offset");
+	const outOfRange = await tool.execute("call", { responseId: "oversized-search", queryIndex: 0, offset: first.details.contentLength + 1 });
+	assert.equal(outOfRange.details.error, "Offset out of range");
 });
 
 test("get_search_content returns small fetched content without continuation noise", async () => {
