@@ -25,8 +25,8 @@ async function withNativeEnv(config, run) {
 	}
 }
 
-function nativeHarness() {
-	const faux = fauxProvider();
+function nativeHarness({ api, compat } = {}) {
+	const faux = fauxProvider({ api });
 	const models = createModels();
 	models.setProvider(faux.provider);
 	const modelRuntime = new Proxy(models, {
@@ -49,7 +49,7 @@ function nativeHarness() {
 		const { session, extensionsResult } = await createAgentSession({
 			cwd: root,
 			agentDir: root,
-			model: faux.getModel(),
+			model: { ...faux.getModel(), compat },
 			modelRuntime,
 			resourceLoader: loader,
 			sessionManager,
@@ -64,7 +64,7 @@ function nativeHarness() {
 }
 
 async function runNative(config = {}) {
-	return withNativeEnv(config, async () => {
+	return withNativeEnv({ toolActivation: "dynamic", ...config }, async () => {
 		const { faux, requests, captureRequest, start } = nativeHarness();
 		faux.setResponses([
 			(context) => {
@@ -98,6 +98,40 @@ test("native Pi sends configured web schemas on the request immediately after ac
 	const fetchOnly = await runNative({ tools: { webSearch: { enabled: false }, sourceCheck: { enabled: false }, getSearchContent: { enabled: false } } });
 	assert.deepEqual(fetchOnly[0].tools.map(tool => tool.name), ["web_enable"]);
 	assert.deepEqual(fetchOnly[1].tools.map(tool => tool.name), ["web_enable", "fetch_content"]);
+});
+
+test("native Pi on a model without native tool additions starts with every web tool and no web_enable", async () => {
+	const requests = await withNativeEnv({}, async () => {
+		const { faux, requests, captureRequest, start } = nativeHarness();
+		faux.setResponses([(context) => {
+			captureRequest(context);
+			return fauxAssistantMessage("done");
+		}]);
+		const session = await start({ extensions: true, sessionManager: SessionManager.inMemory(root), reason: "startup", noTools: "builtin" });
+		await session.prompt("Research this");
+		session.dispose();
+		return requests;
+	});
+	assert.deepEqual(requests[0].tools.map(tool => tool.name), ["web_search", "source_check", "fetch_content", "get_search_content"]);
+	assert.doesNotMatch(requests[0].systemText, /web_enable/);
+});
+
+test("native Pi on a model with native tool additions starts with web_enable by default", async () => {
+	const requests = await withNativeEnv({}, async () => {
+		const { faux, requests, captureRequest, start } = nativeHarness({
+			api: "anthropic-messages",
+			compat: { supportsMidConvoSystemMessages: true, supportsMidConvoToolChanges: true },
+		});
+		faux.setResponses([(context) => {
+			captureRequest(context);
+			return fauxAssistantMessage("done");
+		}]);
+		const session = await start({ extensions: true, sessionManager: SessionManager.inMemory(root), reason: "startup", noTools: "builtin" });
+		await session.prompt("Research this");
+		session.dispose();
+		return requests;
+	});
+	assert.deepEqual(requests[0].tools.map(tool => tool.name), ["web_enable"]);
 });
 
 test("native Pi resumes a session recorded without pi-web-access with its recorded tools", async () => {

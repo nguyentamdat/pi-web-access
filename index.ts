@@ -47,9 +47,10 @@ import { isGeminiApiAvailable } from "./gemini-api.ts";
 import { getActiveGoogleEmail, getGeminiWebAvailabilityDiagnostic, getGeminiWebAvailabilityDiagnosticDetails, isGeminiWebAvailable } from "./gemini-web.ts";
 import { isBrowserCookieAccessAllowed } from "./gemini-web-config.ts";
 import { isBraveAvailable } from "./brave.ts";
-import { isCurrentModelHostedSearchEligible, isOpenAISearchAvailable } from "./openai-search.ts";
+import { isCurrentModelHostedSearchEligible, isOpenAISearchAvailable, isOpenAISubscriptionModelSelected } from "./openai-search.ts";
 import { isParallelAvailable } from "./parallel.ts";
 import { isParallelMcpAvailable } from "./parallel-mcp.ts";
+import { parseStringifiedArrays } from "./tool-arguments.ts";
 import { isTinyFishAvailable } from "./tinyfish.ts";
 import { isSearch1APIAvailable } from "./search1api.ts";
 import { isSearchinfinityAvailable } from "./searchinfinity.ts";
@@ -74,6 +75,7 @@ import { isSerpApiAvailable } from "./serpapi.ts";
 import { isSerperAvailable } from "./serper.ts";
 import { isSerplyAvailable } from "./serply.ts";
 import { isBaizhiAvailable } from "./baizhi.ts";
+import { isZaiAvailable } from "./zai.ts";
 import { isValyuAvailable } from "./valyu.ts";
 import { isXcrawlAvailable } from "./xcrawl.ts";
 import { buildSearchErrorPlan, type SearchErrorDetails, type SearchErrorPlan } from "./render-search-error.ts";
@@ -160,6 +162,7 @@ interface WebSearchConfig {
 	serplyApiKey?: unknown;
 	youApiKey?: unknown;
 	baizhiApiKey?: unknown;
+	zaiApiKey?: unknown;
 	tinyfishApiKey?: unknown;
 	valyuApiKey?: unknown;
 	xaiApiKey?: unknown;
@@ -171,6 +174,7 @@ interface WebSearchConfig {
 	curatorRemote?: unknown;
 	summaryModel?: string;
 	summaryGenerationDeadlineMs?: unknown;
+	summaryInstructions?: unknown;
 	maxInlineContentChars?: unknown;
 	fetch?: {
 		defaultMode?: unknown;
@@ -454,6 +458,13 @@ export function getSummaryGenerationDeadlineMs(): number {
 	return Math.min(value, MAX_SUMMARY_GENERATION_DEADLINE_MS);
 }
 
+export function getSummaryInstructions(): string | undefined {
+	const value = loadConfig().summaryInstructions;
+	if (typeof value !== "string") return undefined;
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function shouldAutoOpenCuratorBrowser(config: WebSearchConfig): boolean {
 	if (config.autoOpenBrowser === false) return false;
 	if (resolveCuratorNetworkConfig().enabled && config.autoOpenBrowser !== true) return false;
@@ -497,6 +508,7 @@ async function getProviderAvailability(ctx: ExtensionContext): Promise<ProviderA
 		serper: allowedProviders.has("serper") && isSerperAvailable(),
 		serply: allowedProviders.has("serply") && isSerplyAvailable(),
 		baizhi: allowedProviders.has("baizhi") && isBaizhiAvailable(),
+		zai: allowedProviders.has("zai") && isZaiAvailable(),
 		valyu: allowedProviders.has("valyu") && isValyuAvailable(),
 	};
 	return {
@@ -511,10 +523,6 @@ async function getOptionalGeminiWebAvailability() {
 	} catch {
 		return null;
 	}
-}
-
-function shouldUseOpenAICodexDefault(ctx?: Pick<ExtensionContext, "model">): boolean {
-	return ctx?.model?.provider === "openai-codex";
 }
 
 function shouldPreferOpenAI(options: Pick<PendingCurate, "numResults" | "recencyFilter"> | undefined, preferOpenAICodexDefault: boolean): boolean {
@@ -543,10 +551,10 @@ async function loadCuratorBootstrap(
 export function resolveCuratorDefaultProvider(
 	provider: SearchProviderSelection,
 	available: ProviderAvailability,
-	ctx?: Pick<ExtensionContext, "model">,
+	ctx?: Parameters<typeof isOpenAISubscriptionModelSelected>[0],
 	options?: Pick<PendingCurate, "numResults" | "recencyFilter">,
 ): SearchProvider {
-	return resolveProvider(provider, available, options, shouldUseOpenAICodexDefault(ctx), ctx);
+	return resolveProvider(provider, available, options, isOpenAISubscriptionModelSelected(ctx), ctx);
 }
 
 function firstAvailableProvider(available: ProviderAvailability, preferOpenAI: boolean, fallback: ResolvedSearchProvider): ResolvedSearchProvider | "auto" {
@@ -1073,9 +1081,9 @@ function handleSessionChange(ctx: ExtensionContext): void {
 export default function (pi: ExtensionAPI) {
 	const initConfig = loadConfigForExtensionInit();
 	const fetchModeConfig = resolveFetchModeConfig(initConfig);
-	const toolActivation = initConfig.toolActivation ?? "dynamic";
-	if (toolActivation !== "dynamic" && toolActivation !== "eager") {
-		throw new Error(`toolActivation in ${WEB_SEARCH_CONFIG_PATH} must be "dynamic" or "eager"`);
+	const toolActivation = initConfig.toolActivation ?? "auto";
+	if (toolActivation !== "auto" && toolActivation !== "dynamic" && toolActivation !== "eager") {
+		throw new Error(`toolActivation in ${WEB_SEARCH_CONFIG_PATH} must be "auto", "dynamic", or "eager"`);
 	}
 	const allowedSearchProviders = initConfig.webSearch?.allowedProviders === undefined ? RESOLVED_SEARCH_PROVIDERS : getAllowedSearchProviders();
 	const allEligibleProviders = allowedSearchProviders.filter(provider => ALL_SEARCH_PROVIDERS.includes(provider));
@@ -1276,6 +1284,7 @@ export default function (pi: ExtensionAPI) {
 				feedback,
 				undefined,
 				getSummaryGenerationDeadlineMs(),
+				getSummaryInstructions(),
 			);
 		} catch (err) {
 			const isEmptyResponse = err instanceof Error && err.message.includes("Summary model returned empty response");
@@ -1829,6 +1838,7 @@ export default function (pi: ExtensionAPI) {
 	if (webSearchEnabled) pi.registerTool({
 		name: toolNames.webSearch,
 		label: "Web Search",
+		prepareArguments: (args) => parseStringifiedArrays(args, ["provider", "queries", "domainFilter"]) as never,
 		description:
 			`Search the web with ${allowedSearchProviders.map(providerLabel).join(", ")}. Provider arrays run simultaneously; ${allPolicyDescription}. The default workflow is none: it returns bounded source-linked search results or provider answers without a curator or generated summary, identifies the providers used, and stores full results for retrieval by responseId. For comprehensive research, prefer queries (plural) with 2-4 varied angles over a single query. When includeContent is true, full page content is fetched in the background. Set workflow to "summary-review" to open the curator with an auto-generated summary draft or "auto-summary" to generate a summary without the browser curator. The configured provider is used when provider is omitted or set to auto; omit provider unless explicitly overriding it.`,
 		promptSnippet:
@@ -2150,6 +2160,7 @@ export default function (pi: ExtensionAPI) {
 					undefined,
 					undefined,
 					getSummaryGenerationDeadlineMs(),
+					getSummaryInstructions(),
 				);
 				approvedSummary = generated.summary;
 				summaryMeta = generated.meta;
@@ -3255,12 +3266,12 @@ export default function (pi: ExtensionAPI) {
 	});
 	}
 
-	if (toolActivation === "dynamic") registerWebToolActivation(pi, [
+	if (toolActivation !== "eager") registerWebToolActivation(pi, [
 		...(webSearchEnabled ? [{ name: toolNames.webSearch, capability: "search" as const }] : []),
 		...(sourceCheckEnabled ? [{ name: toolNames.sourceCheck, capability: "source-check" as const }] : []),
 		...(fetchContentEnabled ? [{ name: toolNames.fetchContent, capability: "fetch" as const }] : []),
 		...(getSearchContentEnabled ? [{ name: toolNames.getSearchContent, capability: "stored-content" as const }] : []),
-	]);
+	], toolActivation);
 
 	if (isCommandEnabled(initConfig, "websearch")) pi.registerCommand("websearch", {
 		description: "Open web search curator",
