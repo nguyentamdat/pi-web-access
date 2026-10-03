@@ -4,9 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- `web_search` can restrict Exa results to a category such as `news` or `research paper` with the new `category` parameter. Other providers ignore it. Without an Exa API key, if Exa's filtered search is unavailable, the category is added to the query text instead. Thanks to [@SuTang-vain](https://github.com/SuTang-vain) for [PR #493](https://github.com/nicobailon/pi-web-access/pull/493).
+- `fetch_content` asks servers for markdown first, so sites that publish markdown versions of pages (Cloudflare, Mintlify, and other docs hosts) return clean markdown directly. `mode: "raw"` still asks for the server's normal representation. Thanks to [@erwinkramer](https://github.com/erwinkramer) for [issue #495](https://github.com/nicobailon/pi-web-access/issues/495).
+- pi-web-access's search and fetch tools can run as an MCP server for other agents (`pi-web-access-mcp`). Thanks to [@Avg8888](https://github.com/Avg8888) for [issue #496](https://github.com/nicobailon/pi-web-access/issues/496).
+
 ### Fixed
 
 - `web_search` accepts `provider`, `queries`, and `domainFilter` arrays that a model sent as a JSON string, such as `provider: "[\"parallel-mcp\"]"`. They failed schema validation before the search ran. Thanks to [@advaitpaliwal](https://github.com/advaitpaliwal) for [PR #491](https://github.com/nicobailon/pi-web-access/pull/491).
+- `get_search_content` reads a fetched page without `url` or `urlIndex` when the stored fetch holds only one page. Before, calls like `{ responseId, findText }` failed with "No URL specified" and the model had to retry with `urlIndex: 0`. Thanks to [@j-koester](https://github.com/j-koester) for [PR #494](https://github.com/nicobailon/pi-web-access/pull/494).
+- `web_search` with `includeContent` keeps page content the search provider already returned and only fetches the pages it didn't cover. Before, it refetched every page and a failed fetch replaced usable content.
+- Brave search with a prepaid (pay-as-you-go) key no longer fails every call after the first with "quota exhausted; estimated reset in ~702h". Prepaid plans report a monthly rate-limit bucket with a limit of 0, which was read as an exhausted quota. Thanks to [@kk-code-lab](https://github.com/kk-code-lab) for [issue #501](https://github.com/nicobailon/pi-web-access/issues/501).
 
 ## [0.35.0] - 2026-09-30
 
