@@ -967,6 +967,7 @@ export function createWebToolCore(host: WebToolCoreHost): WebToolCoreInstance {
 				const result = presentedResults[0];
 				if (result.error) {
 					return {
+						isError: true,
 						content: [{ type: "text", text: `Error: ${result.error}` }],
 						details: { urls: urlList, urlCount: 1, successful: 0, error: result.error, ...(storedContent ? { responseId } : {}), prompt: params.prompt, timestamp: params.timestamp, frames: params.frames },
 					};
@@ -1040,6 +1041,7 @@ export function createWebToolCore(host: WebToolCoreHost): WebToolCoreInstance {
 				: "\n---\nAuthenticated fetch cache is off; repeat the fetch to read content.";
 
 			return {
+				...(successful === 0 ? { isError: true } : {}),
 				content: [{ type: "text", text: output }],
 				details: { urls: urlList, urlCount: urlList.length, successful, totalChars, ...(storedContent ? { responseId } : {}) },
 			};
