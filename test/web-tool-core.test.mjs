@@ -186,3 +186,23 @@ test("standalone store evicts the oldest stored result past its bound", () => {
 	assert.equal(out.kept.isError, undefined);
 	assert.match(out.kept.content[0].text, /readable paragraph without the Pi runtime/);
 });
+
+test("standalone validation failures are flagged as errors before any network call", () => {
+	const { out, requests, blocked } = runStandalone(`
+		const core = createStandaloneWebToolCore();
+		return {
+			noQuery: await core.webSearch({}),
+			noClaim: await core.sourceCheck({}),
+			noUrl: await core.fetchContent({}),
+			findModeWithoutFindText: await core.getSearchContent({ responseId: "any", findMode: "exact" }),
+		};
+	`);
+	assert.deepEqual(requests, []);
+	// Validation failures must not pull in the Pi runtime.
+	assert.deepEqual(blocked, []);
+	for (const result of Object.values(out)) {
+		assert.equal(result.isError, true);
+		assert.equal(result.details.error, result === out.findModeWithoutFindText ? "findMode requires findText" : (result === out.noQuery ? "No query provided" : (result === out.noClaim ? "Missing claim" : "No URL provided")));
+	}
+	assert.match(out.noUrl.content[0].text, /No URL provided\. Use the 'url' parameter/);
+});

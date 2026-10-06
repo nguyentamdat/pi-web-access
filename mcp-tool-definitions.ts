@@ -6,25 +6,33 @@
 
 import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
+import { RESOLVED_SEARCH_PROVIDERS } from "./gemini-search.ts";
 
 function stringEnum(values: readonly string[], description: string) {
 	return Type.Unsafe<string>({ type: "string", enum: [...values], description });
 }
 
+// Kimi authenticates only through Pi's login, so it is never offered here.
+const MCP_SEARCH_PROVIDERS = RESOLVED_SEARCH_PROVIDERS.filter((provider) => provider !== "kimi");
+
 const providerSchema = Type.Union([
-	Type.String(),
-	Type.Array(Type.String(), { minItems: 1 }),
-], { description: "Search provider name, or a non-empty list of providers to search simultaneously. Omit to use the configured provider." });
+	stringEnum(["auto", "all", ...MCP_SEARCH_PROVIDERS], "Single provider."),
+	Type.Array(stringEnum(MCP_SEARCH_PROVIDERS, "Provider."), { minItems: 1 }),
+], { description: "Search provider, or a non-empty list of providers to search simultaneously. Omit or use auto for the configured provider; all searches every eligible provider. Providers without credentials return an error." });
 
 const recencySchema = stringEnum(["day", "week", "month", "year"], "Filter results by recency.");
 const domainFilterSchema = Type.Array(Type.String(), { description: "Limit to domains; prefix with - to exclude." });
 const numResultsSchema = Type.Integer({ minimum: 1, maximum: 20, description: "Results per query (default: 5, max: 20)." });
 const proxySchema = Type.String({ description: "http(s) or socks proxy URL for this call's outbound requests; empty string forces direct access." });
+// Page fetches write a page cache and clone GitHub URLs into a temp directory,
+// including the fetches behind includeContent and fetchContent.
+const fetchingAnnotations = { readOnlyHint: false, destructiveHint: false, openWorldHint: true };
 
 export interface McpToolDefinition {
 	name: string;
 	description: string;
 	inputSchema: TSchema;
+	annotations: { readOnlyHint: boolean; destructiveHint?: boolean; openWorldHint: boolean };
 }
 
 export const MCP_TOOL_DEFINITIONS: readonly McpToolDefinition[] = [
@@ -42,6 +50,7 @@ export const MCP_TOOL_DEFINITIONS: readonly McpToolDefinition[] = [
 			provider: Type.Optional(providerSchema),
 			proxy: Type.Optional(proxySchema),
 		}, { additionalProperties: false }),
+		annotations: fetchingAnnotations,
 	},
 	{
 		name: "fetch_content",
@@ -53,6 +62,7 @@ export const MCP_TOOL_DEFINITIONS: readonly McpToolDefinition[] = [
 			forceClone: Type.Optional(Type.Boolean({ description: "Force cloning GitHub repositories that exceed the size threshold." })),
 			proxy: Type.Optional(proxySchema),
 		}, { additionalProperties: false }),
+		annotations: fetchingAnnotations,
 	},
 	{
 		name: "get_search_content",
@@ -71,6 +81,7 @@ export const MCP_TOOL_DEFINITIONS: readonly McpToolDefinition[] = [
 			], { description: "Text or texts to find in the selected stored content." })),
 			findMode: Type.Optional(stringEnum(["exact", "case-insensitive", "fuzzy"], "Matching mode for findText (default: case-insensitive).")),
 		}, { additionalProperties: false }),
+		annotations: { readOnlyHint: true, openWorldHint: false },
 	},
 	{
 		name: "source_check",
@@ -85,6 +96,7 @@ export const MCP_TOOL_DEFINITIONS: readonly McpToolDefinition[] = [
 			provider: Type.Optional(providerSchema),
 			proxy: Type.Optional(proxySchema),
 		}, { additionalProperties: false }),
+		annotations: fetchingAnnotations,
 	},
 ];
 

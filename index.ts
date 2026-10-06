@@ -56,6 +56,7 @@ import { isKagiAvailable } from "./kagi.ts";
 import { isBochaAvailable } from "./bocha.ts";
 import { isOllamaAvailable } from "./ollama.ts";
 import { isSearXNGAvailable } from "./searxng.ts";
+import { isDegoogAvailable } from "./degoog.ts";
 import { isDuckDuckGoAvailable } from "./duckduckgo.ts";
 import { isAnySearchAvailable } from "./anysearch.ts";
 import { isXaiSearchAvailable } from "./xai-search.ts";
@@ -84,6 +85,7 @@ import {
 	getMaxInlineContentChars,
 	isToolEnabled,
 	loadConfig,
+	markToolError,
 	normalizeProviderInput,
 	normalizeQueryList,
 	normalizeRecencyFilter,
@@ -292,6 +294,7 @@ async function getProviderAvailability(ctx: ExtensionContext): Promise<ProviderA
 		bocha: allowedProviders.has("bocha") && isBochaAvailable(),
 		ollama: allowedProviders.has("ollama") && isOllamaAvailable(),
 		searxng: allowedProviders.has("searxng") && isSearXNGAvailable(),
+		degoog: allowedProviders.has("degoog") && isDegoogAvailable(),
 		duckduckgo: allowedProviders.has("duckduckgo") && isDuckDuckGoAvailable(),
 		perplexity: allowedProviders.has("perplexity") && isPerplexityAvailable(),
 		exa: allowedProviders.has("exa") && isExaAvailable(),
@@ -1351,7 +1354,7 @@ export default function (pi: ExtensionAPI) {
 		}),
 
 		async execute(callId, params, signal, onUpdate, ctx) {
-			return runWithProxy(typeof params.proxy === "string" ? params.proxy : undefined, async () => {
+			return markToolError(await runWithProxy(typeof params.proxy === "string" ? params.proxy : undefined, async () => {
 				const rawQueryList: unknown[] = Array.isArray(params.queries)
 					? params.queries
 					: (params.query !== undefined ? expandQueryString(params.query) : []);
@@ -1604,7 +1607,7 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 			return core.webSearch(params, signal, { extensionContext: ctx, onUpdate, summarize });
-			});
+			}));
 		},
 
 		renderCall(args, theme) {
@@ -1879,7 +1882,7 @@ export default function (pi: ExtensionAPI) {
 			})),
 		}),
 		async execute(_callId, params, signal, _onUpdate, ctx) {
-			return core.sourceCheck(params, signal, { extensionContext: ctx });
+			return markToolError(await core.sourceCheck(params, signal, { extensionContext: ctx }));
 		},
 	});
 
@@ -1928,7 +1931,7 @@ export default function (pi: ExtensionAPI) {
 		}),
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx): Promise<AgentToolResult<Record<string, unknown>>> {
-			return core.fetchContent(params, signal, { extensionContext: ctx, onUpdate });
+			return markToolError(await core.fetchContent(params, signal, { extensionContext: ctx, onUpdate }));
 		},
 
 		renderCall(args, theme) {
@@ -2092,7 +2095,7 @@ export default function (pi: ExtensionAPI) {
 		}),
 
 		async execute(_toolCallId, rawParams): Promise<AgentToolResult<Record<string, unknown>>> {
-			return core.getSearchContent(rawParams);
+			return markToolError(await core.getSearchContent(rawParams));
 		},
 
 		renderCall(args, theme) {
