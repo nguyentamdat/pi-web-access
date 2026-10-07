@@ -120,6 +120,34 @@ function StringEnum<T extends string[]>(values: T, options?: { description?: str
 
 type ExtensionTheme = ExtensionContext["ui"]["theme"];
 
+// structuredContent shapes that codemode scripts receive (web-tool-contract.ts),
+// on success and on isError results.
+const nullableString = (description: string) => Type.Union([Type.String(), Type.Null()], { description });
+const webSearchOutputSchema = Type.Object({
+	responseId: Type.String({ description: "Id of the stored search results" }),
+	fetchId: nullableString("Stored page content id when includeContent fetched or started fetching content, else null"),
+	queries: Type.Array(Type.Object({
+		query: Type.String(),
+		answer: Type.String({ description: "Provider answer text, empty when the provider returned only results" }),
+		error: nullableString("Why this query failed, null on success"),
+		provider: Type.Optional(Type.String()),
+		providers: Type.Optional(Type.Array(Type.String())),
+		results: Type.Array(Type.Object({ title: Type.String(), url: Type.String(), snippet: Type.String() })),
+	})),
+});
+const fetchContentOutputSchema = Type.Object({
+	responseId: nullableString("Id of the stored content, null when nothing was stored"),
+	urls: Type.Array(Type.Object({
+		url: Type.String(),
+		title: Type.String(),
+		content: Type.String({ description: "Full extracted content, not limited by the inline character cap" }),
+		error: nullableString("Why this URL failed, null on success"),
+		mimeType: Type.Optional(Type.String()),
+		status: Type.Optional(Type.Number()),
+		duration: Type.Optional(Type.Number()),
+	})),
+});
+
 /** Shared collapsed/expanded renderer for an error/cancel plan produced by
  * buildSearchErrorPlan(). Used by every tool renderResult's error branch so
  * Ctrl+O (app.tools.expand) reveals diagnostics instead of a dead-end single line. */
@@ -1308,11 +1336,20 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.on("session_start", async (_event, ctx) => handleSessionChange(ctx));
-	pi.on("session_tree", async (_event, ctx) => handleSessionChange(ctx));
+	// web_search calls a tool made, such as a codemode script, reach the tool_call
+	// handlers before execute with parentToolCallId set; execute consumes the id.
+	// Ids of calls a later handler blocked are dropped when the session changes.
+	const nestedSearchCallIds = new Set<string>();
+	if (webSearchEnabled) pi.on("tool_call", (event) => {
+		if (event.parentToolCallId && event.toolName === toolNames.webSearch) nestedSearchCallIds.add(event.toolCallId);
+	});
+
+	pi.on("session_start", async (_event, ctx) => { nestedSearchCallIds.clear(); handleSessionChange(ctx); });
+	pi.on("session_tree", async (_event, ctx) => { nestedSearchCallIds.clear(); handleSessionChange(ctx); });
 
 	pi.on("session_shutdown", () => {
 		sessionActive = false;
+		nestedSearchCallIds.clear();
 		abortPendingFetches();
 		closeCurator();
 		clearCloneCache();
@@ -1352,15 +1389,20 @@ export default function (pi: ExtensionAPI) {
 				description: "http(s) or socks proxy URL (e.g. http://host:port or socks5h://host:port) used for every outbound request in this call (search APIs and content fetches). Node fetch ignores HTTP(S)_PROXY env vars, so set this (or `proxy` in web-search.json) when direct access is blocked; empty string forces direct access.",
 			})),
 		}),
+		outputSchema: webSearchOutputSchema,
 
 		async execute(callId, params, signal, onUpdate, ctx) {
+			// Nested calls neither open the curator unless asked nor fetch content in the background.
+			const nested = nestedSearchCallIds.delete(callId);
 			return markToolError(await runWithProxy(typeof params.proxy === "string" ? params.proxy : undefined, async () => {
 				const rawQueryList: unknown[] = Array.isArray(params.queries)
 					? params.queries
 					: (params.query !== undefined ? expandQueryString(params.query) : []);
 				const queryList = normalizeQueryList(rawQueryList);
 				const configWorkflow = loadConfigForExtensionInit().workflow;
-				const workflow = curatorRunState.resolve(params.workflow, configWorkflow, ctx?.hasUI !== false);
+				const workflow = nested && params.workflow === undefined
+					? "none"
+					: curatorRunState.resolve(params.workflow, configWorkflow, ctx?.hasUI !== false);
 				const shouldCurate = workflow === "summary-review";
 				const recencyFilter = normalizeRecencyFilter(params.recencyFilter);
 
@@ -1606,7 +1648,7 @@ export default function (pi: ExtensionAPI) {
 					return { approvedSummary: generated.summary, summaryMeta: generated.meta };
 				};
 			}
-			return core.webSearch(params, signal, { extensionContext: ctx, onUpdate, summarize });
+			return core.webSearch(params, signal, { extensionContext: ctx, onUpdate, summarize, awaitContent: nested });
 			}));
 		},
 
@@ -1929,6 +1971,7 @@ export default function (pi: ExtensionAPI) {
 				description: "http(s) or socks proxy URL (e.g. http://host:port or socks5h://host:port) used for this fetch. Needed when the target is unreachable directly; localhost and NO_PROXY hosts always bypass the proxy. Empty string forces direct access.",
 			})),
 		}),
+		outputSchema: fetchContentOutputSchema,
 
 		async execute(_toolCallId, params, signal, onUpdate, ctx): Promise<AgentToolResult<Record<string, unknown>>> {
 			return markToolError(await core.fetchContent(params, signal, { extensionContext: ctx, onUpdate }));

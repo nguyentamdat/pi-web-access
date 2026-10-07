@@ -4,14 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-10-05
+
+### Highlights
+
+- Search through degoog, a self-hosted or public metasearch engine, with no API key needed.
+- Perplexity search results now include real page snippets and cost less per search.
+- Pi `codemode` scripts can work with search results and fetched pages as data instead of reading formatted text.
+- Failed tool calls are now marked as errors, so Pi and MCP clients can tell a failure from a success.
+
 ### Added
 
-- New explicit-only degoog search provider for a self-hosted or public [degoog](https://degoog.org) metasearch instance. It is keyless by default and uses `https://degoog.org`; set `degoogBaseUrl` or `DEGOOG_URL` for your own instance, `degoogApiKey` or `DEGOOG_API_KEY` when the instance protects its search routes, and `degoogEngines` to restrict the request to specific engine ids. It supports domain and recency filters, routing, and the curator, and it is never chosen by `auto` or `provider: "all"`. Thanks to [@zhouzhuojie](https://github.com/zhouzhuojie) for [PR #515](https://github.com/nicobailon/pi-web-access/pull/515).
+- New degoog search provider for a self-hosted or public [degoog](https://degoog.org) metasearch instance, used only when you select it. It works without an API key and uses `https://degoog.org` by default. Set `degoogBaseUrl` or `DEGOOG_URL` to use your own instance, `degoogApiKey` or `DEGOOG_API_KEY` if your instance requires a key, and `degoogEngines` to limit which engines it queries. It supports domain and recency filters, routing, and the curator. Thanks to [@zhouzhuojie](https://github.com/zhouzhuojie) for [PR #515](https://github.com/nicobailon/pi-web-access/pull/515).
+- In Pi `codemode` scripts, `web_search` and `fetch_content` return data instead of the text the model sees: each query's results and errors, and each URL's full content and error, even when the call fails. Searches from a script don't open the curator unless the script asks for it, and `includeContent` waits for the pages instead of fetching them in the background. What the model sees and the MCP output are unchanged. See "In codemode scripts" in the README. [Issue #516](https://github.com/nicobailon/pi-web-access/issues/516).
 
 ### Changed
 
-- Perplexity `web_search` results now come from Perplexity's Search API, so each result carries a real page snippet instead of an empty one, and searches cost less ($1 per 1K fast searches, no token billing). Results no longer include a Sonar-written answer; YouTube summaries still use Sonar. Thanks to [@DWalland](https://github.com/DWalland) for [issue #512](https://github.com/nicobailon/pi-web-access/issues/512).
-- Failed tool calls now carry `isError: true` in Pi and over MCP. This covers invalid arguments and calls where nothing succeeded, such as a `web_search` or `source_check` where every search failed. Pi versions before 1.0 ignore the flag. `fetch_content` without a URL now also names the parameters to use, like `web_search` already did. Other message texts and `details` are unchanged. Thanks to [@j-koester](https://github.com/j-koester) for [PR #514](https://github.com/nicobailon/pi-web-access/pull/514).
+- Perplexity `web_search` results now come from Perplexity's Search API, so each result has a real page snippet instead of an empty one, and searches cost less ($1 per 1,000 searches, with no token billing). Results no longer include an answer written by Sonar. YouTube summaries still use Sonar. Thanks to [@DWalland](https://github.com/DWalland) for [issue #512](https://github.com/nicobailon/pi-web-access/issues/512).
+- Failed tool calls are now marked as errors (`isError: true`) in Pi and over MCP. This covers invalid arguments and calls where nothing succeeded, such as a `web_search` or `source_check` where every search failed. Pi versions before 1.0 ignore the marker. `fetch_content` called without a URL now names the parameters to use, as `web_search` already did. Other messages are unchanged. Thanks to [@j-koester](https://github.com/j-koester) for [PR #514](https://github.com/nicobailon/pi-web-access/pull/514).
 
 ## [0.36.0] - 2026-10-04
 
