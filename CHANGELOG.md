@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- New Ceramic search provider for [Ceramic](https://www.ceramic.ai)'s keyword web search API, used only when you select it. Set `ceramicApiKey` or `CERAMIC_API_KEY` to your Ceramic key. Ceramic is a paid API with free starter credits, so it is never picked by `auto` or `all`. Allowed domains are added to the query as `site:` filters, and excluded domains are removed from the results. Ceramic has no date filter, so `recencyFilter` is ignored. Thanks to [@sweepies](https://github.com/sweepies) for [issue #523](https://github.com/nicobailon/pi-web-access/issues/523).
+
+### Changed
+
+- OpenAI `web_search` now runs on the newest Luna model by default, such as `gpt-6-luna` on a ChatGPT subscription, instead of `gpt-5.6-terra`. Terra costs about 20 times as much per token as `gpt-6-luna` and is a generation older, so searches were using a large share of subscription usage. With only an API key, the default is `gpt-6-luna`. Set `openaiSearchModel` to pick a different model. Thanks to [@sslotin](https://github.com/sslotin) for [issue #520](https://github.com/nicobailon/pi-web-access/issues/520).
+
+### Fixed
+
+- A host that serves several conversations at once from one process, with one extension instance per session (an app or chat server built on the Pi SDK), no longer loses results across conversations. Each instance now keeps its own session's results, background fetches and active flag: one conversation starting or ending used to clear every stored result, so a `get_search_content` in another conversation answered "No stored results for responseId …", and its background `includeContent` fetches were aborted. Sessions forked from one history hold the results they share until the last of them ends, and deleting a shared result from `/search` removes it only from that session. Pi itself, which runs one instance and switches its session, behaves as before. GitHub clones are removed when the last live session ends, and while sessions keep overlapping, a session's end removes the clones no fetch has returned since the oldest live session started. A session that restores results from history marks the clones they point at as used, so a session forked from another keeps its clone paths after the original ends. Thanks to [@kid7st](https://github.com/kid7st) for [PR #521](https://github.com/nicobailon/pi-web-access/pull/521).
+- `@modelcontextprotocol/sdk` is updated from 1.27.1 to 1.32.1, which fixes [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h), so `npm audit` no longer reports it. That advisory covers the SDK's OAuth client, which pi-web-access doesn't use: its HTTP providers send API keys in headers and its MCP server runs over stdio. Thanks to [@M1racleShih](https://github.com/M1racleShih) for [PR #522](https://github.com/nicobailon/pi-web-access/pull/522) and [@SidShaytay](https://github.com/SidShaytay) for [issue #519](https://github.com/nicobailon/pi-web-access/issues/519).
+
 ## [0.37.0] - 2026-10-05
 
 ### Highlights
