@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-10-09
+
+### Highlights
+
+- Search with Ceramic, a new paid keyword search provider you can select.
+- OpenAI search now defaults to the newest Luna model, which costs about 20 times less per token than Terra.
+- Answer mode and query rewriting work with models whose provider signs in without an API key, such as pi-multiprovider models.
+- Requests through a proxy keep their method, headers, body and `Content-Length`, and HEAD requests stay HEAD requests.
+
 ### Added
 
 - New Ceramic search provider for [Ceramic](https://www.ceramic.ai)'s keyword web search API, used only when you select it. Set `ceramicApiKey` or `CERAMIC_API_KEY` to your Ceramic key. Ceramic is a paid API with free starter credits, so it is never picked by `auto` or `all`. Allowed domains are added to the query as `site:` filters, and excluded domains are removed from the results. Ceramic has no date filter, so `recencyFilter` is ignored. Thanks to [@sweepies](https://github.com/sweepies) for [issue #523](https://github.com/nicobailon/pi-web-access/issues/523).
@@ -12,9 +21,12 @@ All notable changes to this project will be documented in this file.
 
 - The `web_search` tool description is now four sentences on how to use the tool, instead of a paragraph listing every provider, the `all` policy and each workflow mode. The model still sees the providers and the `all` policy in the `provider` parameter and the modes in the `workflow` parameter. Thanks to [@mcwalrus](https://github.com/mcwalrus) for [issue #528](https://github.com/nicobailon/pi-web-access/issues/528).
 - OpenAI `web_search` now runs on the newest Luna model by default, such as `gpt-6-luna` on a ChatGPT subscription, instead of `gpt-5.6-terra`. Terra costs about 20 times as much per token as `gpt-6-luna` and is a generation older, so searches were using a large share of subscription usage. With only an API key, the default is `gpt-6-luna`. Set `openaiSearchModel` to pick a different model. Thanks to [@sslotin](https://github.com/sslotin) for [issue #520](https://github.com/nicobailon/pi-web-access/issues/520).
+- Search summaries and `fetch_content` answer mode now give Pi the session ID and let its `opencode` and `opencode-go` providers add OpenCode's `x-opencode-session` header, instead of building OpenCode's headers themselves. They no longer send `x-opencode-client`, and custom providers pointed at `opencode.ai` no longer get the session header from pi-web-access. See [issue #537](https://github.com/nicobailon/pi-web-access/issues/537).
 
 ### Fixed
 
+- With a proxy set, `fetch(new Request(...))` now sends the Request's own method, headers, body, redirect setting and abort signal. It used to arrive as a bare GET without them. HEAD requests through the proxy are now real HEAD requests with an empty response body instead of GETs. Thanks to [@xiaozhu1337](https://github.com/xiaozhu1337) for [issue #535](https://github.com/nicobailon/pi-web-access/issues/535) and [PR #536](https://github.com/nicobailon/pi-web-access/pull/536).
+- With a proxy set, HEAD responses keep the server's `Content-Length`, and a POST or PUT with no body sends `Content-Length: 0` as native fetch does, instead of omitting it (which some servers answer with 411). See [issue #539](https://github.com/nicobailon/pi-web-access/issues/539).
 - Keyless Parallel MCP searches no longer fail with Parallel's "free-tier rate limit" error. Requests went out with Node's default `undici` User-Agent, which Parallel rate-limits as one shared bucket, so they now send `User-Agent: pi-web-access`. Thanks to [@kestermcullough](https://github.com/kestermcullough) for [PR #531](https://github.com/nicobailon/pi-web-access/pull/531).
 - `fetch_content` answer mode and search query rewriting now work with models whose provider signs in without giving Pi an API key, such as models added by [pi-multiprovider](https://github.com/monotykamary/pi-multiprovider). Answer mode used to fail with "No API key available for answer model" even though Pi could call the model. Thanks to [@eikopf](https://github.com/eikopf) for [issue #530](https://github.com/nicobailon/pi-web-access/issues/530).
 - A host that serves several conversations at once from one process, with one extension instance per session (an app or chat server built on the Pi SDK), no longer loses results across conversations. Each instance now keeps its own session's results, background fetches and active flag: one conversation starting or ending used to clear every stored result, so a `get_search_content` in another conversation answered "No stored results for responseId …", and its background `includeContent` fetches were aborted. Sessions forked from one history hold the results they share until the last of them ends, and deleting a shared result from `/search` removes it only from that session. Pi itself, which runs one instance and switches its session, behaves as before. GitHub clones are removed when the last live session ends, and while sessions keep overlapping, a session's end removes the clones no fetch has returned since the oldest live session started. A session that restores results from history marks the clones they point at as used, so a session forked from another keeps its clone paths after the original ends. Thanks to [@kid7st](https://github.com/kid7st) for [PR #521](https://github.com/nicobailon/pi-web-access/pull/521).
